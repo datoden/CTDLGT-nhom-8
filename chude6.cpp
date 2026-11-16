@@ -1,279 +1,111 @@
-#include <array>
-#include <cctype>
-#include <fstream>
 #include <iostream>
-#include <limits>
-#include <memory>
+#include <fstream>
+#include <sstream>
 #include <string>
-#include <utility>
 #include <vector>
+#include <utility>
+#include <iomanip>
+#include <limits>
+#include <cctype>
+#include <algorithm>
+#include <ctime>
+#include <cstdlib>
+#include <windows.h>
 using namespace std;
+string intToStr(int n) {
+    stringstream ss;
+    ss << n;
+    return ss.str();
+}
+int getUTF8Length(const string& str) {
+    int len = 0;
+    for (size_t i = 0; i < str.length(); ) {
+        unsigned char c = (unsigned char)str[i];
+        if (c <= 0x7F) i += 1;
+        else if ((c & 0xE0) == 0xC0) i += 2;
+        else if ((c & 0xF0) == 0xE0) i += 3;
+        else if ((c & 0xF8) == 0xF0) i += 4;
+        else i += 1;
+        len++;
+    }
+    return len;
+}
+void printAligned(const string& text, int width) {
+    cout << text;
+    int actualLength = getUTF8Length(text);
+    int spacesToPad = width - actualLength;
+    if (spacesToPad > 0) {
+        cout << string(spacesToPad, ' ');
+    }
+}
+
+struct WordEntry {
+    string word;
+    string meaning;
+    string wordClass;     
+    string pronunciation; 
+    string topic;         
+};
+struct HistoryRecord {
+    string query;
+    string mode;
+    string status;
+    string timestamp;
+};
 struct TrieNode {
-array<unique_ptr<TrieNode>, 26> child{};
-bool isEnd = false;
-string meaning;
+    TrieNode *child[26];
+    bool isEnd;
+    string meaning;
+    string wordClass;
+    string pronunciation;
+    string topic;
+
+    TrieNode() {
+        for (int i = 0; i < 26; i++) {
+            child[i] = NULL;
+        }
+        isEnd = false;
+        meaning = "";
+        wordClass = "Chua ro";
+        pronunciation = "---";
+        topic = "Chung";
+    }
 };
+string trimStr(const string &s) {
+    string res = s;
+    while (!res.empty() && isspace((unsigned char)res[0])) {
+        res.erase(0, 1);
+    }
+    while (!res.empty() && isspace((unsigned char)res[res.size() - 1])) {
+        res.erase(res.size() - 1, 1);
+    }
+    return res;
+}
+string toLowerStr(const string &s) {
+    string res = trimStr(s);
+    for (size_t i = 0; i < res.size(); i++) {
+        res[i] = (char)tolower((unsigned char)res[i]);
+    }
+    return res;
+}
 bool normalizeWord(string &word) {
-while (!word.empty() &&
-isspace(static_cast<unsigned char>(word.front())))
-word.erase(word.begin());
-while (!word.empty() &&
-isspace(static_cast<unsigned char>(word.back())))
-word.pop_back();
-if (word.empty()) return false;
-for (char &ch : word) {
-unsigned char c = static_cast<unsigned char>(ch);
-if (c > 127 || !isalpha(c)) return false;
-ch = static_cast<char>(tolower(c));
-if (ch < 'a' || ch > 'z') return false;
+    word = trimStr(word);
+    if (word.empty()) return false;
+
+    for (int i = 0; i < (int)word.size(); i++) {
+        unsigned char c = (unsigned char)word[i];
+        if (c > 127 || !isalpha(c))
+            return false;
+        word[i] = (char)tolower(c);
+        if (word[i] < 'a' || word[i] > 'z')
+            return false;
+    }
+    return true;
 }
-return true;
-}
-class Trie {
-private:
-TrieNode root;
-const TrieNode* findNode(const string &word) const {
-const TrieNode *cur = &root;
-for (char ch : word) {
-int idx = ch - 'a';
-if (idx < 0 || idx >= 26 || !cur->child[idx])
-return nullptr;
-cur = cur->child[idx].get();
-}
-return cur;
-}
-bool hasChildren(const TrieNode &node) const {
-for (const auto &p : node.child)
-if (p) return true;
-return false;
-}
-bool eraseRec(TrieNode *node, const string &word, size_t pos, bool &deleted) {
-if (pos == word.size()) {
-if (!node->isEnd) return false;
-node->isEnd = false;
-node->meaning.clear();
-deleted = true;
-return !hasChildren(*node);
-}
-int idx = word[pos] - 'a';
-if (idx < 0 || idx >= 26 || !node->child[idx])
-return false;
-bool removeChild = eraseRec(node->child[idx].get(), word, pos + 1, deleted);
-if (removeChild) node->child[idx].reset();
-return !node->isEnd && !hasChildren(*node);
-}
-void collectRec(const TrieNode *node, string &current, vector<pair<string, string>> &out, size_t limit) const {
-if (!node || out.size() >= limit) return;
-if (node->isEnd)
-out.push_back({current, node->meaning});
-for (int i = 0; i < 26 && out.size() < limit; ++i) {
-if (node->child[i]) {
-current.push_back(static_cast<char>('a' + i));
-collectRec(node->child[i].get(), current, out, limit);
-current.pop_back();
-}
-}
-}
-void listRec(const TrieNode *node, string &current, vector<pair<string, string>> &out) const {
-if (node->isEnd)
-out.push_back({current, node->meaning});
-for (int i = 0; i < 26; ++i) {
-if (node->child[i]) {
-current.push_back(static_cast<char>('a' + i));
-listRec(node->child[i].get(), current, out);
-current.pop_back();
-}
-}
-}
-void saveRec(const TrieNode *node, string &current, ostream &out) const {
-if (node->isEnd)
-out << current << '|' << node->meaning << '\n';
-for (int i = 0; i < 26; ++i) {
-if (node->child[i]) {
-current.push_back(static_cast<char>('a' + i));
-saveRec(node->child[i].get(), current, out);
-current.pop_back();
-}
-}
-}
-public:
-bool insert(const string &word, const string &meaning) {
-TrieNode *cur = &root;
-for (char ch : word) {
-int idx = ch - 'a';
-if (!cur->child[idx])
-cur->child[idx] = make_unique<TrieNode>();
-cur = cur->child[idx].get();
-}
-bool isNew = !cur->isEnd;
-cur->isEnd = true;
-cur->meaning = meaning;
-return isNew;
-}
-bool search(const string &word, string &meaning) const {
-const TrieNode *node = findNode(word);
-if (!node || !node->isEnd) return false;
-meaning = node->meaning;
-return true;
-}
-bool erase(const string &word) {
-bool deleted = false;
-eraseRec(&root, word, 0, deleted);
-return deleted;
-}
-vector<pair<string, string>> suggest(const string &prefix, size_t limit = 10) const {
-vector<pair<string, string>> result;
-const TrieNode *node = findNode(prefix);
-if (!node || limit == 0) return result;
-string current = prefix;
-collectRec(node, current, result, limit);
-return result;
-}
-vector<pair<string, string>> listAll() const {
-vector<pair<string, string>> result;
-string current;
-listRec(&root, current, result);
-return result;
-}
-bool saveToFile(const string &filename) const {
-ofstream out(filename);
-if (!out) return false;
-string current;
-saveRec(&root, current, out);
-return static_cast<bool>(out);
-}
-int loadFromFile(const string &filename) {
-ifstream in(filename);
-if (!in) return 0;
-string line;
-int count = 0;
-while (getline(in, line)) {
-size_t sep = line.find('|');
-if (sep == string::npos) continue;
-string word = line.substr(0, sep);
-string meaning = line.substr(sep + 1);
-if (meaning.empty() || !normalizeWord(word)) continue;
-insert(word, meaning);
-++count;
-}
-return count;
-}
-};
-void showEntries(const vector<pair<string, string>> &items) {
-if (items.empty()) {
-cout << "Khong co ket qua.\n";
-return;
-}
-for (size_t i = 0; i < items.size(); ++i)
-cout << i + 1 << ". " << items[i].first
-<< " : " << items[i].second << '\n';
-}
-int readChoice() {
-int choice;
-if (!(cin >> choice)) {
-cin.clear();
-cin.ignore(numeric_limits<streamsize>::max(), '\n');
-return -1;
-}
-cin.ignore(numeric_limits<streamsize>::max(), '\n');
-return choice;
-}
-int main() {
-Trie dictionary;
-const string filename = "tu_vung.txt";
-int loaded = dictionary.loadFromFile(filename);
-cout << "=== TU DIEN ANH - VIET VA GOI Y TU ===\n";
-cout << "So ban ghi doc duoc: " << loaded << "\n";
-bool running = true;
-while (running) {
-cout << "\n---------- MENU ----------\n";
-cout << "1. Tra cuu tu\n";
-cout << "2. Them / cap nhat tu\n";
-cout << "3. Xoa tu\n";
-cout << "4. Goi y tu theo tien to\n";
-cout << "5. Liet ke toan bo tu dien\n";
-cout << "6. Luu du lieu\n";
-cout << "0. Luu va thoat\n";
-cout << "Lua chon: ";
-int choice = readChoice();
-string word, meaning;
-switch (choice) {
-case 1: {
-cout << "Nhap tu can tra: ";
-getline(cin, word);
-if (!normalizeWord(word)) {
-cout << "Tu khong hop le. Chi dung chu cai A-Z.\n";
-break;
-}
-if (dictionary.search(word, meaning))
-cout << word << " nghia la: " << meaning << '\n';
-else
-cout << "Khong tim thay tu \"" << word << "\".\n";
-break;
-}
-case 2: {
-cout << "Nhap tu tieng Anh: ";
-getline(cin, word);
-if (!normalizeWord(word)) {
-cout << "Tu khong hop le. Chi dung chu cai A-Z.\n";
-break;
-}
-cout << "Nhap nghia tieng Viet: ";
-getline(cin, meaning);
-if (meaning.empty()) {
-cout << "Nghia khong duoc de trong.\n";
-break;
-}
-bool isNew = dictionary.insert(word, meaning);
-cout << (isNew ? "Da them tu moi.\n"
-: "Tu da ton tai; da cap nhat nghia.\n");
-break;
-}
-case 3: {
-cout << "Nhap tu can xoa: ";
-getline(cin, word);
-if (!normalizeWord(word)) {
-cout << "Tu khong hop le. Chi dung chu cai A-Z.\n";
-break;
-}
-if (dictionary.erase(word))
-cout << "Da xoa tu " << word << ".\n";
-else
-cout << "Tu khong ton tai.\n";
-break;
-}
-case 4: {
-cout << "Nhap tien to: ";
-getline(cin, word);
-if (!word.empty() && !normalizeWord(word)) {
-cout << "Tien to khong hop le.\n";
-break;
-}
-if (word.empty()) {
-cout << "Tien to rong: hien thi 10 tu dau tien.\n";
-}
-showEntries(dictionary.suggest(word, 10));
-break;
-}
-case 5:
-showEntries(dictionary.listAll());
-break;
-case 6:
-if (dictionary.saveToFile(filename))
-cout << "Da luu vao " << filename << ".\n";
-else
-cout << "Khong the ghi tep du lieu.\n";
-break;
-case 0:
-if (dictionary.saveToFile(filename))
-cout << "Da luu du lieu. Tam biet!\n";
-else
-cout << "Canh bao: khong luu duoc tep du lieu.\n";
-running = false;
-break;
-default:
-cout << "Lua chon khong hop le. Hay nhap lai.\n";
-}
-}
-return 0;
+string getCurrentTimeStr() {
+    time_t now = time(0);
+    tm *ltm = localtime(&now);
+    char buf[30];
+    strftime(buf, sizeof(buf), "%H:%M:%S %d/%m/%Y", ltm);
+    return string(buf);
 }
