@@ -160,3 +160,181 @@ private:
         }
         return false;
     }
+void deleteTree(TrieNode *node) {
+        if (node == NULL) return;
+        for (int i = 0; i < 26; i++) {
+            deleteTree(node->child[i]);
+        }
+        delete node;
+    }
+
+    bool eraseRec(TrieNode *node, const string &word, int pos, bool &deleted) {
+        if (pos == (int)word.size()) {
+            if (!node->isEnd)
+                return false;
+
+            node->isEnd = false;
+            node->meaning.clear();
+            node->wordClass = "Chua ro";
+            node->pronunciation = "---";
+            node->topic = "Chung";
+            deleted = true;
+
+            return !hasChildren(node);
+        }
+
+        int idx = word[pos] - 'a';
+        if (idx < 0 || idx >= 26 || node->child[idx] == NULL) {
+            return false;
+        }
+
+        bool removeChild = eraseRec(node->child[idx], word, pos + 1, deleted);
+        if (removeChild) {
+            delete node->child[idx];
+            node->child[idx] = NULL;
+        }
+
+        return !node->isEnd && !hasChildren(node);
+    }
+
+    WordEntry makeEntry(const string &word, const TrieNode *node) const {
+        WordEntry e;
+        e.word = word;
+        e.meaning = node->meaning;
+        e.wordClass = node->wordClass;
+        e.pronunciation = node->pronunciation;
+        e.topic = node->topic;
+        return e;
+    }
+
+    void collectRec(const TrieNode *node, string &current, vector<WordEntry> &out, int limit) const {
+        if (node == NULL || (int)out.size() >= limit)
+            return;
+
+        if (node->isEnd) {
+            out.push_back(makeEntry(current, node));
+        }
+
+        for (int i = 0; i < 26 && (int)out.size() < limit; i++) {
+            if (node->child[i] != NULL) {
+                current += (char)('a' + i);
+                collectRec(node->child[i], current, out, limit);
+                current.erase(current.size() - 1, 1);
+            }
+        }
+    }
+
+    void listRec(const TrieNode *node, string &current, vector<WordEntry> &out) const {
+        if (node->isEnd) {
+            out.push_back(makeEntry(current, node));
+        }
+
+        for (int i = 0; i < 26; i++) {
+            if (node->child[i] != NULL) {
+                current += (char)('a' + i);
+                listRec(node->child[i], current, out);
+                current.erase(current.size() - 1, 1);
+            }
+        }
+    }
+
+    void saveRec(const TrieNode *node, string &current, ostream &out) const {
+        if (node->isEnd) {
+            if (node->wordClass == "Chua ro" && node->pronunciation == "---" && node->topic == "Chung") {
+                out << current << "|" << node->meaning << endl;
+            } else {
+                out << current << "|" << node->meaning << "|"
+                    << node->wordClass << "|" << node->pronunciation << "|" << node->topic << endl;
+            }
+        }
+
+        for (int i = 0; i < 26; i++) {
+            if (node->child[i] != NULL) {
+                current += (char)('a' + i);
+                saveRec(node->child[i], current, out);
+current.erase(current.size() - 1, 1);
+            }
+        }
+    }
+
+public:
+    ~Trie() {
+        for (int i = 0; i < 26; i++) {
+            deleteTree(root.child[i]);
+            root.child[i] = NULL;
+        }
+    }
+
+    bool insert(const string &word, const string &meaning,
+                const string &wordClass = "Chua ro",
+                const string &pronunciation = "---",
+                const string &topic = "Chung") {
+        TrieNode *cur = &root;
+
+        for (int i = 0; i < (int)word.size(); i++) {
+            int idx = word[i] - 'a';
+            if (cur->child[idx] == NULL) {
+                cur->child[idx] = new TrieNode();
+            }
+            cur = cur->child[idx];
+        }
+
+        bool isNew = !cur->isEnd;
+        cur->isEnd = true;
+        cur->meaning = meaning;
+        cur->wordClass = wordClass.empty() ? "Chua ro" : wordClass;
+        cur->pronunciation = pronunciation.empty() ? "---" : pronunciation;
+        cur->topic = topic.empty() ? "Chung" : topic;
+
+        return isNew;
+    }
+
+    bool searchEntry(const string &word, WordEntry &entry) const {
+        const TrieNode *node = findNode(word);
+        if (node == NULL || !node->isEnd)
+            return false;
+
+        entry = makeEntry(word, node);
+        return true;
+    }
+
+    vector<WordEntry> searchVietnamese(const string &vnQuery) const {
+        vector<WordEntry> all = listAll();
+        vector<WordEntry> result;
+        string target = toLowerStr(vnQuery);
+        if (target.empty()) return result;
+
+        for (size_t i = 0; i < all.size(); i++) {
+            if (toLowerStr(all[i].meaning).find(target) != string::npos) {
+                result.push_back(all[i]);
+            }
+        }
+        return result;
+    }
+
+    vector<WordEntry> searchApproximate(const string &query, int maxDist = 2) const {
+        vector<WordEntry> all = listAll();
+        vector<pair<int, WordEntry> > scored;
+        string q = toLowerStr(query);
+
+        for (size_t i = 0; i < all.size(); i++) {
+            int dist = levenshteinDistance(q, all[i].word);
+            if (dist <= maxDist || all[i].word.find(q) != string::npos) {
+                scored.push_back(make_pair(dist, all[i]));
+            }
+        }
+
+        for (size_t i = 0; i < scored.size(); i++) {
+            for (size_t j = i + 1; j < scored.size(); j++) {
+                if (scored[j].first < scored[i].first) {
+                    swap(scored[i], scored[j]);
+                }
+            }
+        }
+
+        vector<WordEntry> result;
+        for (size_t i = 0; i < scored.size() && i < 10; i++) {
+            result.push_back(scored[i].second);
+        }
+        return result;
+    }
