@@ -167,7 +167,6 @@ void deleteTree(TrieNode *node) {
         }
         delete node;
     }
-
     bool eraseRec(TrieNode *node, const string &word, int pos, bool &deleted) {
         if (pos == (int)word.size()) {
             if (!node->isEnd)
@@ -338,3 +337,138 @@ public:
         }
         return result;
     }
+vector<WordEntry> filterByClass(const string &wClass) const {
+        vector<WordEntry> all = listAll();
+        vector<WordEntry> result;
+        string target = toLowerStr(wClass);
+
+        for (size_t i = 0; i < all.size(); i++) {
+            if (toLowerStr(all[i].wordClass).find(target) != string::npos) {
+                result.push_back(all[i]);
+            }
+        }
+        return result;
+    }
+
+    vector<WordEntry> filterByTopic(const string &topic) const {
+        vector<WordEntry> all = listAll();
+        vector<WordEntry> result;
+        string target = toLowerStr(topic);
+
+        for (size_t i = 0; i < all.size(); i++) {
+            if (toLowerStr(all[i].topic).find(target) != string::npos) {
+                result.push_back(all[i]);
+            }
+        }
+        return result;
+    }
+
+    bool erase(const string &word) {
+        bool deleted = false;
+        eraseRec((TrieNode*)&root, word, 0, deleted);
+        return deleted;
+    }
+
+    vector<WordEntry> suggest(const string &prefix, int limit = 10) const {
+        vector<WordEntry> result;
+        const TrieNode *node = findNode(prefix);
+        if (node == NULL || limit == 0)
+            return result;
+
+        string current = prefix;
+        collectRec(node, current, result, limit);
+        return result;
+    }
+
+    vector<WordEntry> listAll() const {
+        vector<WordEntry> result;
+        string current = "";
+        listRec(&root, current, result);
+        return result;
+    }
+
+    bool saveToFile(const string &filename) const {
+        ofstream out(filename.c_str());
+        if (!out)
+            return false;
+
+        string current = "";
+        saveRec(&root, current, out);
+        return (bool)out;
+    }
+
+    int loadFromFile(const string &filename) {
+        ifstream in(filename.c_str());
+        if (!in)
+            return 0;
+
+        string line;
+        int count = 0;
+
+        while (getline(in, line)) {
+            if (trimStr(line).empty()) continue;
+
+            vector<string> parts;
+            stringstream ss(line);
+            string item;
+            while (getline(ss, item, '|')) {
+                parts.push_back(item);
+            }
+
+            if (parts.size() < 2) continue;
+
+            string word = parts[0];
+            string meaning = trimStr(parts[1]);
+            string wClass = (parts.size() >= 3) ? trimStr(parts[2]) : "Chua ro";
+            string pron   = (parts.size() >= 4) ? trimStr(parts[3]) : "---";
+            string topic  = (parts.size() >= 5) ? trimStr(parts[4]) : "Chung";
+
+            if (meaning.empty() || !normalizeWord(word))
+                continue;
+
+            insert(word, meaning, wClass, pron, topic);
+            count++;
+        }
+
+        return count;
+    }
+};
+void showEntries(const vector<WordEntry> &items) {
+    if (items.empty()) {
+        cout << "\nKhong co tu vung nao!\n";
+        return;
+    }
+cout << "\n========================================================================================================\n";
+    cout << "                                      BANG TU VUNG ANH - VIET\n";
+    cout << "========================================================================================================\n";
+
+    printAligned("STT", 5);
+    printAligned("TU VUNG", 16);
+    printAligned("TU LOAI", 14);
+    printAligned("PHIEN AM", 18);
+    printAligned("CHU DE", 16);
+    cout << "NGHIA TIENG VIET\n";
+
+    cout << "--------------------------------------------------------------------------------------------------------\n";
+
+    for (size_t i = 0; i < items.size(); i++) {
+        printAligned(intToStr((int)i + 1), 5);
+        printAligned(items[i].word, 16);
+        printAligned(items[i].wordClass, 14);
+        printAligned(items[i].pronunciation, 18);
+        printAligned(items[i].topic, 16);
+        cout << items[i].meaning << endl;
+    }
+
+    cout << "========================================================================================================\n";
+    cout << "Tong so tu vung: " << items.size() << endl;
+}
+void printSingleEntry(const WordEntry &e) {
+    cout << "\n+----------------------------------------------------+\n";
+    cout << "| Tu vung   : "; printAligned(e.word, 39); cout << "|\n";
+    cout << "| Phien am  : "; printAligned(e.pronunciation, 39); cout << "|\n";
+    cout << "| Tu loai   : "; printAligned(e.wordClass, 39); cout << "|\n";
+    cout << "| Chu de    : "; printAligned(e.topic, 39); cout << "|\n";
+    cout << "| Nghia TV  : "; printAligned(e.meaning, 39); cout << "|\n";
+    cout << "+----------------------------------------------------+\n";
+}
