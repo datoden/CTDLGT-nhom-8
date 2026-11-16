@@ -655,3 +655,172 @@ getline(cin, topic);
 
                 break;
             }
+case 4: {
+                cout << "Nhap chu cai dau (hoac tien to) can goi y: ";
+                getline(cin, word);
+
+                if (!word.empty() && !normalizeWord(word)) {
+                    cout << "Chu cai dau khong hop le (chi dung A-Z).\n";
+                    break;
+                }
+
+                if (word.empty()) {
+                    cout << "Ban de trong: Hien thi 10 tu dau tien theo bang chu cai:\n";
+                } else {
+                    cout << "Cac tu vung bat dau bang \"" << word << "\":\n";
+                }
+
+                showEntries(dictionary.suggest(word, 10));
+                break;
+            }
+
+            case 5: {
+                cout << "Nhap tu tieng Anh can tim gan dung: ";
+                getline(cin, word);
+
+                if (!normalizeWord(word)) {
+                    cout << "Tu khong hop le. Chi dung chu cai A-Z.\n";
+                    break;
+                }
+
+                cout << "Nhap sai so ky tu cho phep (mac dinh 2): ";
+                string distStr;
+                getline(cin, distStr);
+                int maxDist = 2;
+                if (!trimStr(distStr).empty() && isdigit((unsigned char)trimStr(distStr)[0])) {
+                    maxDist = atoi(trimStr(distStr).c_str());
+                }
+
+                vector<WordEntry> approx = dictionary.searchApproximate(word, maxDist);
+                HistoryRecord rec = {word, "Tra gan dung", "Tim thay " + intToStr((int)approx.size()) + " tu", getCurrentTimeStr()};
+                historyList.push_back(rec);
+
+                if (approx.empty()) {
+                    cout << "Khong tim thay tu nao gan giong voi \"" << word << "\".\n";
+                } else {
+                    cout << "\nKet qua cac tu gan dung voi \"" << word << "\":";
+                    showEntries(approx);
+                }
+                break;
+            }
+
+            case 6: {
+                vector<WordEntry> all = dictionary.listAll();
+                vector<string> classes;
+                for (size_t i = 0; i < all.size(); i++) {
+                    bool exists = false;
+                    for (size_t j = 0; j < classes.size(); j++) {
+                        if (toLowerStr(classes[j]) == toLowerStr(all[i].wordClass)) {
+                            exists = true;
+                            break;
+                        }
+                    }
+                    if (!exists) classes.push_back(all[i].wordClass);
+                }
+
+                cout << "Cac tu loai hien co trong tu dien: ";
+                for (size_t i = 0; i < classes.size(); i++) {
+                    cout << "[" << classes[i] << "] ";
+                }
+                cout << "\nNhap tu loai muon loc: ";
+                getline(cin, wClass);
+                wClass = trimStr(wClass);
+
+                if (wClass.empty()) {
+                    cout << "Tu loai khong duoc de trong.\n";
+                    break;
+                }
+showEntries(dictionary.filterByClass(wClass));
+                break;
+            }
+
+            case 7: {
+                vector<WordEntry> all = dictionary.listAll();
+                vector<string> topics;
+                for (size_t i = 0; i < all.size(); i++) {
+                    bool exists = false;
+                    for (size_t j = 0; j < topics.size(); j++) {
+                        if (toLowerStr(topics[j]) == toLowerStr(all[i].topic)) {
+                            exists = true;
+                            break;
+                        }
+                    }
+                    if (!exists) topics.push_back(all[i].topic);
+                }
+
+                cout << "Cac chu de hien co trong tu dien: ";
+                for (size_t i = 0; i < topics.size(); i++) {
+                    cout << "[" << topics[i] << "] ";
+                }
+                cout << "\nNhap chu de muon xem: ";
+                getline(cin, topic);
+                topic = trimStr(topic);
+
+                if (topic.empty()) {
+                    cout << "Chu de khong duoc de trong.\n";
+                    break;
+                }
+
+                showEntries(dictionary.filterByTopic(topic));
+                break;
+            }
+
+            case 8: {
+                if (historyList.empty()) {
+                    cout << "\nChua co lich su tra cuu nao trong phien lam viec nay.\n";
+                    break;
+                }
+
+                cout << "\n=================================================================================================\n";
+                cout << "                                     LICH SU TRA CUU TU VUNG\n";
+                cout << "=================================================================================================\n";
+                
+                printAligned("STT", 6);
+                printAligned("THOI GIAN", 22);
+                printAligned("TU KHOA", 20);
+                printAligned("LOAI TRA CUU", 16);
+                cout << "KET QUA\n";
+                
+                cout << "-------------------------------------------------------------------------------------------------\n";
+                for (size_t i = 0; i < historyList.size(); i++) {
+                    printAligned(intToStr((int)i + 1), 6);
+                    printAligned(historyList[i].timestamp, 22);
+                    printAligned(historyList[i].query, 20);
+                    printAligned(historyList[i].mode, 16);
+                    cout << historyList[i].status << endl;
+                }
+                cout << "=================================================================================================\n";
+                break;
+            }
+
+            case 9: {
+                showEntries(dictionary.listAll());
+                break;
+            }
+
+            case 10: {
+                if (dictionary.saveToFile(filename))
+                    cout << "Da luu du lieu thanh cong vao file '" << filename << "'.\n";
+else
+                    cout << "Loi: Khong the ghi tep du lieu.\n";
+                break;
+            }
+
+            case 0: {
+                if (dictionary.saveToFile(filename))
+                    cout << "Da luu du lieu vao '" << filename << "'. Tam biet!\n";
+                else
+                    cout << "Canh bao: Khong luu duoc tep du lieu.\n";
+
+                running = false;
+                break;
+            }
+
+            default: {
+                cout << "Lua chon khong hop le. Vui long nhap tu 0 den 10.\n";
+            }
+        }
+    }
+
+    return 0;
+}
