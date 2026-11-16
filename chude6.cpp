@@ -472,3 +472,186 @@ void printSingleEntry(const WordEntry &e) {
     cout << "| Nghia TV  : "; printAligned(e.meaning, 39); cout << "|\n";
     cout << "+----------------------------------------------------+\n";
 }
+int readChoice() {
+    int choice;
+    if (!(cin >> choice)) {
+        cin.clear();
+        cin.ignore(numeric_limits<streamsize>::max(), '\n');
+        return -1;
+    }
+    cin.ignore(numeric_limits<streamsize>::max(), '\n');
+    return choice;
+}
+
+int main() {
+    // Cau hinh hien thi tieng Viet UTF-8 tren Windows Console
+    SetConsoleOutputCP(CP_UTF8);
+    SetConsoleCP(CP_UTF8);
+    
+    CONSOLE_FONT_INFOEX cfi;
+    cfi.cbSize = sizeof(cfi);
+    cfi.nFont = 0;
+    cfi.dwFontSize.X = 0;
+    cfi.dwFontSize.Y = 18;
+    cfi.FontFamily = FF_DONTCARE;
+    cfi.FontWeight = FW_NORMAL;
+    wcscpy(cfi.FaceName, L"Consolas");
+    SetCurrentConsoleFontEx(GetStdHandle(STD_OUTPUT_HANDLE), FALSE, &cfi);
+
+    Trie dictionary;
+    vector<HistoryRecord> historyList;
+
+    const string filename = "tu_vung.txt";
+    int loaded = dictionary.loadFromFile(filename);
+
+    cout << "=== TU DIEN ANH - VIET THONG MINH ===\n";
+    cout << "So ban ghi doc duoc tu '" << filename << "': " << loaded << endl;
+
+    cout << "\nDANH SACH TU VUNG HIEN CO:\n";
+    showEntries(dictionary.listAll());
+
+    bool running = true;
+
+    while (running) {
+        cout << "\n================ MENU CHUC NANG ================\n";
+        cout << "1. Tra cuu tu da nang (Anh -> Viet & Viet -> Anh)\n";
+        cout << "2. Them / cap nhat tu (Tu loai, Phien am, Chu de)\n";
+        cout << "3. Xoa tu\n";
+        cout << "4. Goi y tu dong bang chu cai dau\n";
+        cout << "5. Tra cuu tu gan dung\n";
+        cout << "6. Phan loai tu vung\n";
+        cout << "7. Phan loai theo Chu de\n";
+        cout << "8. Xem lich su tra cuu\n";
+        cout << "9. Liet ke toan bo tu dien\n";
+        cout << "10. Luu du lieu ra file\n";
+        cout << "0. Luu va thoat\n";
+        cout << "================================================\n";
+        cout << "Lua chon cua ban: ";
+
+        int choice = readChoice();
+        string word, meaning, wClass, pron, topic;
+
+        switch (choice) {
+            case 1: {
+                cout << "Chon chieu tra cuu (1: Anh -> Viet, 2: Viet -> Anh, 3: Tu dong quet ca hai): ";
+                int subMode = readChoice();
+                if (subMode < 1 || subMode > 3) subMode = 3;
+
+                cout << "Nhap tu hoac nghia can tra: ";
+                string rawInput;
+                getline(cin, rawInput);
+                rawInput = trimStr(rawInput);
+
+                if (rawInput.empty()) {
+                    cout << "Tu khoa khong duoc de trong!\n";
+                    break;
+                }
+
+                bool foundAny = false;
+                string normEng = rawInput;
+                bool isValidEng = normalizeWord(normEng);
+
+                // Nhanh 1: Tra Anh -> Viet
+                if ((subMode == 1 || subMode == 3) && isValidEng) {
+                    WordEntry entry;
+                    if (dictionary.searchEntry(normEng, entry)) {
+                        cout << "\n[KET QUA TRA CUU ANH -> VIET]";
+                        printSingleEntry(entry);
+foundAny = true;
+
+                        HistoryRecord rec = {rawInput, "Anh -> Viet", "Thanh cong (" + entry.meaning + ")", getCurrentTimeStr()};
+                        historyList.push_back(rec);
+                    }
+                }
+
+                // Nhanh 2: Tra Viet -> Anh
+                if (subMode == 2 || (subMode == 3 && !foundAny)) {
+                    vector<WordEntry> vnMatches = dictionary.searchVietnamese(rawInput);
+                    if (!vnMatches.empty()) {
+                        cout << "\n[KET QUA TRA CUU VIET -> ANH CHO \"" << rawInput << "\"]";
+                        showEntries(vnMatches);
+                        foundAny = true;
+
+                        HistoryRecord rec = {rawInput, "Viet -> Anh", "Tim thay " + intToStr((int)vnMatches.size()) + " tu", getCurrentTimeStr()};
+                        historyList.push_back(rec);
+                    }
+                }
+
+                // Tra cuu tu gan dung neu khong tim thay
+                if (!foundAny) {
+                    cout << "\nKhong tim thay chinh xac \"" << rawInput << "\" trong tu dien.\n";
+                    HistoryRecord rec = {rawInput, "Tra cuu", "Khong tim thay", getCurrentTimeStr()};
+                    historyList.push_back(rec);
+
+                    if (isValidEng) {
+                        string firstChar = normEng.substr(0, 1);
+                        vector<WordEntry> prefixSug = dictionary.suggest(firstChar, 5);
+                        if (!prefixSug.empty()) {
+                            cout << "\n-> Goi y tu dong bat dau bang chu cai '" << firstChar << "':";
+                            showEntries(prefixSug);
+                        }
+
+                        vector<WordEntry> approx = dictionary.searchApproximate(normEng, 2);
+                        if (!approx.empty()) {
+                            cout << "\n-> Cac tu tieng Anh gan dung nhat voi \"" << normEng << "\":";
+                            showEntries(approx);
+                        }
+                    }
+                }
+                break;
+            }
+
+            case 2: {
+                cout << "Nhap tu tieng Anh: ";
+                getline(cin, word);
+
+                if (!normalizeWord(word)) {
+                    cout << "Tu khong hop le. Chi dung chu cai A-Z.\n";
+                    break;
+                }
+
+                cout << "Nhap nghia tieng Viet: ";
+                getline(cin, meaning);
+                meaning = trimStr(meaning);
+                if (meaning.empty()) {
+                    cout << "Nghia khong duoc de trong.\n";
+                    break;
+                }
+
+                cout << "Nhap phan loai tu (VD: Danh tu(N), Dong tu(V), Tinh tu(ADJ)...): ";
+                getline(cin, wClass);
+                wClass = trimStr(wClass);
+
+                cout << "Nhap phien am: ";
+                getline(cin, pron);
+                pron = trimStr(pron);
+
+                cout << "Nhap chu de (VD: Giao tiep, CNTT, Dong vat... Enter de bo qua): ";
+getline(cin, topic);
+                topic = trimStr(topic);
+
+                bool isNew = dictionary.insert(word, meaning, wClass, pron, topic);
+                if (isNew)
+                    cout << "Da them tu moi thanh cong!\n";
+                else
+                    cout << "Tu da ton tai; da cap nhat thong tin moi!\n";
+
+                break;
+            }
+
+            case 3: {
+                cout << "Nhap tu tieng Anh can xoa: ";
+                getline(cin, word);
+
+                if (!normalizeWord(word)) {
+                    cout << "Tu khong hop le.\n";
+                    break;
+                }
+
+                if (dictionary.erase(word))
+                    cout << "Da xoa tu '" << word << "' khoi tu dien.\n";
+                else
+                    cout << "Tu khong ton tai.\n";
+
+                break;
+            }
